@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OCRとテキスト比較ツール</title>
+    <title>日本語OCRとテキスト比較ツール</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -60,15 +60,21 @@
             color: red;
             font-weight: bold;
         }
+        .loading {
+            text-align: center;
+            font-size: 18px;
+            color: #007bff;
+        }
     </style>
 </head>
 <body>
-    <h1>OCRとテキスト比較ツール</h1>
+    <h1>日本語OCRとテキスト比較ツール</h1>
 
     <!-- OCRツール -->
     <div class="container">
-        <input type="file" id="imageInput" accept="image/*">
+        <input type="file" id="imageInput" accept="image/png, image/jpeg">
         <button onclick="performOCR()">OCRを開始</button>
+        <div id="loadingMessage" class="loading" style="display: none;">処理中...</div>
         <textarea id="ocrOutput" placeholder="OCR結果がここに表示されます"></textarea>
     </div>
 
@@ -109,8 +115,6 @@
                     line2 = line2.replace(regex, replaceList[j]);
                 }
 
-                line2 = line2.replace(/\/[^\/]*\//g, '').replace(/[\/／]/g, '');
-
                 if (line1 !== line2) {
                     result += `行 ${i + 1}:\n左: ${line1}\n右: <span class="highlight">${line2}</span>\n\n`;
                 }
@@ -122,6 +126,7 @@
         async function performOCR() {
             const fileInput = document.getElementById('imageInput');
             const ocrOutput = document.getElementById('ocrOutput');
+            const loadingMessage = document.getElementById('loadingMessage');
 
             if (!fileInput.files.length) {
                 alert("画像を選択してください。");
@@ -129,6 +134,13 @@
             }
 
             const imageFile = fileInput.files[0];
+            if (!['image/png', 'image/jpeg'].includes(imageFile.type)) {
+                alert("対応している画像形式はPNGおよびJPEGのみです。");
+                return;
+            }
+
+            loadingMessage.style.display = 'block'; // 処理中メッセージを表示
+
             const reader = new FileReader();
 
             reader.onload = async () => {
@@ -136,14 +148,20 @@
                     logger: info => console.log(info) // ログ出力
                 });
 
-                await worker.load();
-                await worker.loadLanguage('jpn');
-                await worker.initialize('jpn');
+                try {
+                    await worker.load(); // ワーカーをロード
+                    await worker.loadLanguage('jpn'); // 日本語データをロード
+                    await worker.initialize('jpn'); // 日本語データを初期化
 
-                const { data: { text } } = await worker.recognize(reader.result);
-                ocrOutput.value = text;
-
-                await worker.terminate();
+                    const { data: { text } } = await worker.recognize(reader.result);
+                    ocrOutput.value = text;
+                } catch (error) {
+                    console.error("OCRエラー:", error);
+                    alert("OCR処理中にエラーが発生しました。");
+                } finally {
+                    await worker.terminate();
+                    loadingMessage.style.display = 'none'; // 処理中メッセージを非表示
+                }
             };
 
             reader.readAsDataURL(imageFile);
