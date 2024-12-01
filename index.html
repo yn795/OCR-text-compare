@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OCRツール</title>
+    <title>OCRとテキスト比較ツール</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -13,31 +13,30 @@
         }
         h1 {
             text-align: center;
-            margin-bottom: 20px;
         }
         .container {
-            max-width: 800px;
-            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-bottom: 20px;
         }
         textarea {
             width: 100%;
             height: 200px;
-            margin-top: 10px;
+            font-size: 16px;
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 5px;
-            font-size: 16px;
-            resize: none;
-        }
-        input[type="file"] {
-            margin-top: 10px;
+            box-sizing: border-box;
+            white-space: pre-wrap;
+            overflow-x: auto;
         }
         button {
-            margin-top: 10px;
+            display: block;
+            margin: 10px auto;
             padding: 10px 20px;
-            font-size: 16px;
             background-color: #007bff;
-            color: #fff;
+            color: white;
             border: none;
             border-radius: 5px;
             cursor: pointer;
@@ -45,43 +44,109 @@
         button:hover {
             background-color: #0056b3;
         }
+        .output {
+            width: 100%;
+            background: #272822;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 14px;
+            height: 200px;
+            white-space: pre-wrap;
+            box-sizing: border-box;
+        }
+        .highlight {
+            color: red;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
-    <h1>OCRツール</h1>
+    <h1>OCRとテキスト比較ツール</h1>
+
+    <!-- OCRツール -->
     <div class="container">
-        <label for="imageInput">画像をアップロードしてください:</label>
         <input type="file" id="imageInput" accept="image/*">
-        <button onclick="performOCR()">OCRを実行</button>
-        <textarea id="ocrOutput" placeholder="OCR結果がここに表示されます..." readonly></textarea>
+        <button onclick="performOCR()">OCRを開始</button>
+        <textarea id="ocrOutput" placeholder="OCR結果がここに表示されます"></textarea>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.0/dist/tesseract.min.js"></script>
+    <!-- テキスト比較ツール -->
+    <div class="container">
+        <textarea id="text1" placeholder="左側のテキストを入力..."></textarea>
+        <textarea id="text2" placeholder="右側のテキストを入力またはOCR結果をコピー..."></textarea>
+    </div>
+    <button onclick="compareAndReplace()">比較と置換</button>
+    <div class="output" id="output"></div>
+
+    <!-- Tesseract.jsをCDNから読み込み -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
     <script>
+        const findList = [
+            "呼びかけ", "あまり", "パーセント", "（：「", "Q", "ており、", "、：「", "火を付け",
+            "ケガ", "前月", "わか", "こうした中", "とした上で", "「", "ON", "m", "ｍ", "mm", "ｍｍ", "cm", "ｃｍ", "km", "ｋｍ", "g", "ｇ", "kg", "ｋｇ", "メートルメートル", "ｋメートル", "kメートル"
+        ];
+
+        const replaceList = [
+            "呼び掛け", "余り", "％", "（「", "：「（Q.", "ていて、", "、「", "火をつけ",
+            "けが", "先月", "分か", "こうしたなか、", "としたうえで", "「", "⭐︎", "メートル", "メートル",
+            "ミリ", "ミリ", "センチ", "センチ", "キロ", "キロ", "グラム", "グラム", "キログラム", "キログラム", "ミリ", "キロ", "キロ"
+        ];
+
+        function compareAndReplace() {
+            const text1 = document.getElementById('text1').value.split('\n');
+            const text2 = document.getElementById('text2').value.split('\n');
+            const maxLength = Math.max(text1.length, text2.length);
+            let result = '';
+
+            for (let i = 0; i < maxLength; i++) {
+                const line1 = text1[i] || '';
+                let line2 = text2[i] || '';
+                
+                for (let j = 0; j < findList.length; j++) {
+                    const regex = new RegExp(findList[j], 'g');
+                    line2 = line2.replace(regex, replaceList[j]);
+                }
+
+                line2 = line2.replace(/\/[^\/]*\//g, '').replace(/[\/／]/g, '');
+
+                if (line1 !== line2) {
+                    result += `行 ${i + 1}:\n左: ${line1}\n右: <span class="highlight">${line2}</span>\n\n`;
+                }
+            }
+
+            document.getElementById('output').innerHTML = result || '差異は見つかりませんでした。';
+        }
+
         async function performOCR() {
-            const imageInput = document.getElementById('imageInput').files[0];
+            const fileInput = document.getElementById('imageInput');
             const ocrOutput = document.getElementById('ocrOutput');
 
-            if (!imageInput) {
+            if (!fileInput.files.length) {
                 alert("画像を選択してください。");
                 return;
             }
 
-            ocrOutput.value = "OCRを実行中...お待ちください。";
+            const imageFile = fileInput.files[0];
+            const reader = new FileReader();
 
-            try {
-                const { data: { text } } = await Tesseract.recognize(
-                    imageInput,
-                    'jpn', // 日本語を指定
-                    {
-                        logger: info => console.log(info) // ログ出力（任意）
-                    }
-                );
+            reader.onload = async () => {
+                const worker = Tesseract.createWorker({
+                    logger: info => console.log(info) // ログ出力
+                });
+
+                await worker.load();
+                await worker.loadLanguage('jpn');
+                await worker.initialize('jpn');
+
+                const { data: { text } } = await worker.recognize(reader.result);
                 ocrOutput.value = text;
-            } catch (error) {
-                console.error(error);
-                ocrOutput.value = "OCRの実行中にエラーが発生しました。";
-            }
+
+                await worker.terminate();
+            };
+
+            reader.readAsDataURL(imageFile);
         }
     </script>
 </body>
