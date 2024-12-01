@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>小さな文字の高精度OCRとテキスト比較ツール</title>
     <style>
+        /* スタイルは前回のものをそのまま使用します */
         body {
             font-family: Arial, sans-serif;
             margin: 0;
@@ -108,11 +109,6 @@
         const findList = []; // 例: ['検索パターン1', '検索パターン2']
         const replaceList = []; // 例: ['置換後1', '置換後2']
 
-        // Tesseract.jsのワーカーを作成
-        const worker = Tesseract.createWorker({
-            logger: m => console.log(m) // ログを表示
-        });
-
         async function preprocessImage(imageFile) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -153,26 +149,19 @@
             const ocrOutput = document.getElementById('ocrOutput');
             ocrOutput.value = '';
 
-            // ワーカーのロードと初期化
-            await worker.load();
-            await worker.loadLanguage('jpn');
-            await worker.initialize('jpn');
-            await worker.setParameters({
-                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ぁ-んァ-ン一-龥、。・「」'
-            });
-
             for (const file of files) {
                 const preprocessedImage = await preprocessImage(file);
                 try {
-                    const { data: { text } } = await worker.recognize(preprocessedImage);
-                    ocrOutput.value += text.replace(/\/[^\/]*\//g, '').replace(/[\/／]/g, '') + '\n\n';
+                    const result = await Tesseract.recognize(preprocessedImage, 'jpn', {
+                        logger: m => console.log(m)
+                    });
+                    let text = result.data.text;
+                    text = text.replace(/\/[^\/]*\//g, '').replace(/[\/／]/g, '');
+                    ocrOutput.value += text + '\n\n';
                 } catch (error) {
                     console.error(error);
                 }
             }
-
-            // ワーカーを終了
-            await worker.terminate();
         }
 
         function compareAndHighlight() {
