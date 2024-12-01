@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -116,13 +116,11 @@
                 const line1 = text1[i] || '';
                 let line2 = text2[i] || '';
                 
-                // Apply replacement only to the right-side text
                 for (let j = 0; j < findList.length; j++) {
                     const regex = new RegExp(findList[j], 'g');
                     line2 = line2.replace(regex, replaceList[j]);
                 }
 
-                // Remove meaningless phrases surrounded by "/" and standalone slashes
                 line2 = line2.replace(/\/[^\/]*\//g, '').replace(/[\/／]/g, '');
 
                 if (line1 !== line2) {
@@ -168,9 +166,11 @@
             ocrOutput.value = '';
             Array.from(files).forEach(file => {
                 preprocessImage(file).then(preprocessedImage => {
-                    Tesseract.recognize(preprocessedImage, 'jpn')
+                    Tesseract.recognize(preprocessedImage, 'jpn', {
+                        logger: info => console.log(info) // Logs OCR progress
+                    })
                         .then(({ data: { text } }) => {
-                            text = text.replace(/\/[^\/]*\//g, '').replace(/[\/／]/g, ''); // Clean text
+                            text = text.replace(/\/[^\/]*\//g, '').replace(/[\/／]/g, '');
                             ocrOutput.value += text + '\n\n';
                         })
                         .catch(err => console.error(err));
