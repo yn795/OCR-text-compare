@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>High Precision OCR for Small Text</title>
+    <title>小さな文字の高精度OCRとテキスト比較ツール</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -16,18 +16,18 @@
         }
         .container {
             display: flex;
-            justify-content: space-between;
+            flex-direction: column; /* スマホ対応のため縦方向に変更 */
             gap: 20px;
             margin-bottom: 20px;
         }
-        .image-container {
+        .image-container, .ocr-container {
             width: 100%;
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 5px;
             background-color: white;
         }
-        .ocr-output {
+        textarea, .ocr-output {
             width: 100%;
             height: 200px;
             font-size: 16px;
@@ -51,21 +51,68 @@
         button:hover {
             background-color: #0056b3;
         }
+        label {
+            display: block;
+            margin-bottom: 10px;
+        }
+        input[type="file"] {
+            display: block;
+            margin-bottom: 10px;
+        }
+        .output {
+            width: 100%;
+            background: #272822;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 14px;
+            height: 200px;
+            white-space: pre-wrap;
+            box-sizing: border-box;
+        }
+        .highlight {
+            color: red;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
-    <h1>High Precision OCR for Small Text</h1>
+    <h1>小さな文字の高精度OCRとテキスト比較ツール</h1>
+
+    <!-- テキスト比較ツール -->
+    <div class="container">
+        <textarea id="text1" placeholder="左側のテキストをここに入力..."></textarea>
+        <textarea id="text2" placeholder="右側のテキストをここに入力..."></textarea>
+    </div>
+    <button onclick="compareAndHighlight()">比較してハイライト表示</button>
+    <div class="output" id="output"></div>
+
+    <!-- OCRツール -->
     <div class="container">
         <div class="image-container">
-            <label for="imageInput">Upload images for OCR:</label>
+            <label for="imageInput">OCR用の画像をアップロードしてください（5～10ファイル）：</label>
             <input type="file" id="imageInput" multiple accept="image/*">
-            <button onclick="performOCR()">Scan and Process OCR</button>
+            <button onclick="performOCR()">OCRを実行</button>
         </div>
-        <textarea id="ocrOutput" class="ocr-output" placeholder="OCR results will appear here..."></textarea>
+        <div class="ocr-container">
+            <textarea id="ocrOutput" class="ocr-output" placeholder="OCR結果がここに表示されます..."></textarea>
+            <button onclick="copyOCRToText2()">OCR結果を右側のテキストにコピー</button>
+        </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js"></script>
+    <!-- Tesseract.jsのスクリプトを読み込む -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@2/dist/tesseract.min.js"></script>
     <script>
+        // 置換パターンを定義（必要に応じて編集してください）
+        const findList = []; // 例: ['検索パターン1', '検索パターン2']
+        const replaceList = []; // 例: ['置換後1', '置換後2']
+
+        // Tesseract.jsのワーカーを作成
+        const worker = Tesseract.createWorker({
+            logger: m => console.log(m) // ログを表示
+        });
+
         async function preprocessImage(imageFile) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -106,18 +153,57 @@
             const ocrOutput = document.getElementById('ocrOutput');
             ocrOutput.value = '';
 
+            // ワーカーのロードと初期化
+            await worker.load();
+            await worker.loadLanguage('jpn');
+            await worker.initialize('jpn');
+            await worker.setParameters({
+                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ぁ-んァ-ン一-龥、。・「」'
+            });
+
             for (const file of files) {
                 const preprocessedImage = await preprocessImage(file);
                 try {
-                    const { data: { text } } = await Tesseract.recognize(preprocessedImage, 'jpn', {
-                        logger: info => console.log(info), // ログを確認するため
-                        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ぁ-んァ-ン一-龥、。・「」' // 日本語用の文字セット
-                    });
-                    ocrOutput.value += text + '\n\n';
+                    const { data: { text } } = await worker.recognize(preprocessedImage);
+                    ocrOutput.value += text.replace(/\/[^\/]*\//g, '').replace(/[\/／]/g, '') + '\n\n';
                 } catch (error) {
                     console.error(error);
                 }
             }
+
+            // ワーカーを終了
+            await worker.terminate();
+        }
+
+        function compareAndHighlight() {
+            const text1 = document.getElementById('text1').value.split('\n');
+            const text2 = document.getElementById('text2').value.split('\n');
+            const maxLength = Math.max(text1.length, text2.length);
+            let result = '';
+
+            for (let i = 0; i < maxLength; i++) {
+                const line1 = text1[i] || '';
+                let line2 = text2[i] || '';
+
+                // 置換を適用
+                for (let j = 0; j < findList.length; j++) {
+                    const regex = new RegExp(findList[j], 'g');
+                    line2 = line2.replace(regex, replaceList[j]);
+                }
+
+                // 不要な文字を削除
+                line2 = line2.replace(/\/[^\/]*\//g, '').replace(/[\/／]/g, '');
+
+                if (line1 !== line2) {
+                    result += `行 ${i + 1}:\n左: ${line1}\n右: <span class="highlight">${line2}</span>\n\n`;
+                }
+            }
+
+            document.getElementById('output').innerHTML = result || '差分は見つかりませんでした。';
+        }
+
+        function copyOCRToText2() {
+            document.getElementById('text2').value = document.getElementById('ocrOutput').value;
         }
     </script>
 </body>
