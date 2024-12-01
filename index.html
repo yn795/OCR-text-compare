@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>小さな文字の高精度OCRとテキスト比較ツール</title>
     <style>
-        /* スタイルは前回のものをそのまま使用します */
+        /* スタイルはそのまま使用します */
         body {
             font-family: Arial, sans-serif;
             margin: 0;
@@ -103,44 +103,49 @@
     </div>
 
     <!-- Tesseract.jsのスクリプトを読み込む -->
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@2/dist/tesseract.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
     <script>
         // 置換パターンを定義（必要に応じて編集してください）
         const findList = []; // 例: ['検索パターン1', '検索パターン2']
         const replaceList = []; // 例: ['置換後1', '置換後2']
 
         async function preprocessImage(imageFile) {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const img = new Image();
-
             return new Promise((resolve, reject) => {
-                img.onload = () => {
-                    canvas.width = img.width * 6; // 解像度を6倍に拡大
-                    canvas.height = img.height * 6;
-                    ctx.scale(6, 6);
-                    ctx.drawImage(img, 0, 0);
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
 
-                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                    const data = imageData.data;
+                        canvas.width = img.width * 6; // 解像度を6倍に拡大
+                        canvas.height = img.height * 6;
+                        ctx.scale(6, 6);
+                        ctx.drawImage(img, 0, 0);
 
-                    // コントラスト強化とノイズ除去
-                    for (let i = 0; i < data.length; i += 4) {
-                        const r = data[i];
-                        const g = data[i + 1];
-                        const b = data[i + 2];
-                        const avg = 0.299 * r + 0.587 * g + 0.114 * b; // 輝度
-                        const adjusted = avg > 150 ? 255 : 0; // 明暗を強調
-                        data[i] = adjusted;
-                        data[i + 1] = adjusted;
-                        data[i + 2] = adjusted;
-                    }
-                    ctx.putImageData(imageData, 0, 0);
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const data = imageData.data;
 
-                    resolve(canvas.toDataURL());
+                        // コントラスト強化とノイズ除去
+                        for (let i = 0; i < data.length; i += 4) {
+                            const r = data[i];
+                            const g = data[i + 1];
+                            const b = data[i + 2];
+                            const avg = 0.299 * r + 0.587 * g + 0.114 * b; // 輝度
+                            const adjusted = avg > 150 ? 255 : 0; // 明暗を強調
+                            data[i] = adjusted;
+                            data[i + 1] = adjusted;
+                            data[i + 2] = adjusted;
+                        }
+                        ctx.putImageData(imageData, 0, 0);
+
+                        resolve(canvas.toDataURL());
+                    };
+                    img.onerror = reject;
+                    img.src = reader.result;
                 };
-                img.onerror = reject;
-                img.src = URL.createObjectURL(imageFile);
+                reader.onerror = reject;
+                reader.readAsDataURL(imageFile);
             });
         }
 
@@ -152,9 +157,17 @@
             for (const file of files) {
                 const preprocessedImage = await preprocessImage(file);
                 try {
-                    const result = await Tesseract.recognize(preprocessedImage, 'jpn', {
-                        logger: m => console.log(m)
-                    });
+                    const result = await Tesseract.recognize(
+                        preprocessedImage,
+                        'jpn',
+                        {
+                            logger: m => console.log(m),
+                            workerBlobURL: false,
+                            workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/worker.min.js',
+                            corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@4.0.1/tesseract-core.wasm.js',
+                            langPath: 'https://tessdata.projectnaptha.com/4.0.0/'
+                        }
+                    );
                     let text = result.data.text;
                     text = text.replace(/\/[^\/]*\//g, '').replace(/[\/／]/g, '');
                     ocrOutput.value += text + '\n\n';
