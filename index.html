@@ -1,267 +1,282 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ブラウザで日本語字幕抽出</title>
-  <!-- Tesseract.js -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.3/dist/tesseract.min.js"></script>
-  <!-- html2canvas -->
-  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+　<meta charset="UTF-8" />
+　<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+　<title>ブラウザで日本語字幕抽出</title>
+　<!-- Tesseract.js -->
+　<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.3/dist/tesseract.min.js"></script>
+　<!-- html2canvas -->
+　<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+　<!-- JSZip（ZIP作成用） -->
+　<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+　<!-- FileSaver.js（ZIP自動保存用） -->
+　<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 </head>
 <body>
-  <h1>日本語字幕抽出ツール</h1>
+　<h1>日本語字幕抽出ツール</h1>
 
-  <!-- 動画アップロード＆処理開始 -->
-  <section id="upload-section">
-    <h2>動画をアップロード</h2>
-    <input type="file" id="video-upload" accept="video/*" />
-    <button onclick="processVideo()">処理開始</button>
-  </section>
+　<!-- 動画アップロード＆処理開始 -->
+　<section id="upload-section">
+　　<h2>動画をアップロード</h2>
+　　<input type="file" id="video-upload" accept="video/*" />
+　　<button onclick="processVideo()">処理開始</button>
+　</section>
 
-  <!-- フレーム表示＆静止画一括コピー -->
-  <section id="frames-section" style="display:none;">
-    <h2>切り出したフレーム一覧</h2>
-    <div id="frames-list"></div>
-    <button id="copy-images-btn" style="margin-top:20px;" onclick="copyAllFrames()">静止画を一括コピー</button>
-  </section>
+　<!-- フレーム表示＆静止画一括コピー -->
+　<section id="frames-section" style="display:none;">
+　　<h2>切り出したフレーム一覧</h2>
+　　<div id="frames-list"></div>
+　　<button id="copy-images-btn" style="margin-top:20px;" onclick="copyAllFrames()">静止画を一括コピー</button>
+　</section>
 
-  <!-- 抽出字幕表示 -->
-  <section id="text-section" style="display:none;">
-    <h2>抽出された字幕</h2>
-    <pre id="subtitle-text"></pre>
-  </section>
+　<!-- 抽出字幕表示 -->
+　<section id="text-section" style="display:none;">
+　　<h2>抽出された字幕</h2>
+　　<pre id="subtitle-text"></pre>
+　</section>
 
-  <!-- ページ全体スクリーンショットコピー -->
-  <button id="capture-btn" style="margin-top:20px;" onclick="captureAndCopyPage()">このページをコピー</button>
-  <a href="https://keep.google.com/" target="_blank" style="margin-left:10px; text-decoration:none; color:blue;">Google Keepを開く</a>
+　<!-- ページ全体スクリーンショットコピー -->
+　<button id="capture-btn" style="margin-top:20px;" onclick="captureAndCopyPage()">このページをコピー</button>
+　<a href="https://keep.google.com/" target="_blank" style="margin-left:10px; text-decoration:none; color:blue;">Google Keepを開く</a>
 
-  <script>
-    // フレーム（静止画）のDataURLを保存する配列
-    let extractedFrames = [];
+　<script>
+　　// フレーム（静止画）のDataURLを保存する配列
+　　let extractedFrames = [];
 
-    /**
-     * 動画を読み込み、3秒ごとにフレームを抽出
-     */
-    async function processVideo() {
-      const fileInput = document.getElementById('video-upload');
-      if (!fileInput.files.length) {
-        alert('動画ファイルを選択してください');
-        return;
-      }
-      const videoFile = fileInput.files[0];
-      const video = document.createElement('video');
-      video.src = URL.createObjectURL(videoFile);
-      video.crossOrigin = 'anonymous';
-      video.load();
+　　/**
+　　 * 動画を読み込み、2秒ごとにフレームを抽出
+　　 */
+　　async function processVideo() {
+　　　　const fileInput = document.getElementById('video-upload');
+　　　　if (!fileInput.files.length) {
+　　　　　　alert('動画ファイルを選択してください');
+　　　　　　return;
+　　　　}
+　　　　const videoFile = fileInput.files[0];
+　　　　const video = document.createElement('video');
+　　　　video.src = URL.createObjectURL(videoFile);
+　　　　video.crossOrigin = 'anonymous';
+　　　　video.load();
 
-      video.onloadeddata = async () => {
-        const frames = await extractFrames(video, 3); // 3秒ごとにフレーム抽出
-        extractedFrames = frames; // 静止画データを保存
-        displayFrames(frames);
-        const subtitles = await extractTextFromFrames(frames);
-        displaySubtitles(subtitles);
-      };
-    }
+　　　　video.onloadeddata = async () => {
+　　　　　　const frames = await extractFrames(video, 2); // 2秒ごとにフレーム抽出
+　　　　　　extractedFrames = frames; // 静止画データを保存
+　　　　　　displayFrames(frames);
+　　　　　　const subtitles = await extractTextFromFrames(frames);
+　　　　　　displaySubtitles(subtitles);
+　　　　　　// フレーム抽出完了後、自動的にZIPファイルとして一括ダウンロード
+　　　　　　downloadAllFrames(frames);
+　　　　};
+　　}
 
-    /**
-     * 動画から一定間隔でフレームを抽出
-     * @param {HTMLVideoElement} video
-     * @param {number} interval
-     * @returns {Promise<string[]>} 抽出したフレーム(DataURL)の配列
-     */
-    function extractFrames(video, interval) {
-      return new Promise((resolve) => {
-        const frames = [];
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        const duration = video.duration;
-        let currentTime = 0;
+　　/**
+　　 * 動画から一定間隔でフレームを抽出
+　　 * @param {HTMLVideoElement} video
+　　 * @param {number} interval
+　　 * @returns {Promise<string[]>} 抽出したフレーム(DataURL)の配列
+　　 */
+　　function extractFrames(video, interval) {
+　　　　return new Promise((resolve) => {
+　　　　　　const frames = [];
+　　　　　　const canvas = document.createElement('canvas');
+　　　　　　const context = canvas.getContext('2d');
+　　　　　　const duration = video.duration;
+　　　　　　let currentTime = 0;
 
-        video.pause();
+　　　　　　video.pause();
 
-        // フレーム取得処理
-        const captureFrame = () => {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+　　　　　　// フレーム取得処理
+　　　　　　const captureFrame = () => {
+　　　　　　　　canvas.width = video.videoWidth;
+　　　　　　　　canvas.height = video.videoHeight;
+　　　　　　　　context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-          // サイズを705x397にリサイズ
-          const resizedCanvas = document.createElement('canvas');
-          const resizedContext = resizedCanvas.getContext('2d');
-          resizedCanvas.width = 705;
-          resizedCanvas.height = 397;
-          resizedContext.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, 705, 397);
+　　　　　　　　// サイズを705×397にリサイズ
+　　　　　　　　const resizedCanvas = document.createElement('canvas');
+　　　　　　　　const resizedContext = resizedCanvas.getContext('2d');
+　　　　　　　　resizedCanvas.width = 705;
+　　　　　　　　resizedCanvas.height = 397;
+　　　　　　　　resizedContext.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, 705, 397);
 
-          // JPG形式でDataURL化
-          frames.push(resizedCanvas.toDataURL('image/jpeg'));
+　　　　　　　　// JPG形式でDataURL化
+　　　　　　　　frames.push(resizedCanvas.toDataURL('image/jpeg'));
 
-          currentTime += interval;
-          if (currentTime <= duration) {
-            video.currentTime = currentTime;
-          } else {
-            resolve(frames);
-          }
-        };
+　　　　　　　　currentTime += interval;
+　　　　　　　　if (currentTime <= duration) {
+　　　　　　　　　　video.currentTime = currentTime;
+　　　　　　　　} else {
+　　　　　　　　　　resolve(frames);
+　　　　　　　　}
+　　　　　　};
 
-        video.ontimeupdate = captureFrame;
-        video.currentTime = currentTime;
-      });
-    }
+　　　　　　video.ontimeupdate = captureFrame;
+　　　　　　video.currentTime = currentTime;
+　　　　});
+　　}
 
-    /**
-     * 抽出フレームを表示
-     * @param {string[]} frames
-     */
-    function displayFrames(frames) {
-      const framesList = document.getElementById('frames-list');
-      framesList.innerHTML = '';
-      frames.forEach((frame, index) => {
-        const img = document.createElement('img');
-        img.src = frame;
-        img.alt = `Frame ${index}`;
-        img.style.margin = '5px';
-        img.width = 705; // 表示上のサイズ
-        img.height = 397;
-        framesList.appendChild(img);
-      });
-      document.getElementById('frames-section').style.display = 'block';
-    }
+　　/**
+　　 * 抽出フレームを表示
+　　 * @param {string[]} frames
+　　 */
+　　function displayFrames(frames) {
+　　　　const framesList = document.getElementById('frames-list');
+　　　　framesList.innerHTML = '';
+　　　　frames.forEach((frame, index) => {
+　　　　　　const img = document.createElement('img');
+　　　　　　img.src = frame;
+　　　　　　img.alt = `Frame ${index}`;
+　　　　　　img.style.margin = '5px';
+　　　　　　img.width = 705; // 表示上のサイズ
+　　　　　　img.height = 397;
+　　　　　　framesList.appendChild(img);
+　　　　});
+　　　　document.getElementById('frames-section').style.display = 'block';
+　　}
 
-    /**
-     * 静止画一括コピー
-     */
-    async function copyAllFrames() {
-      if (!extractedFrames.length) {
-        alert('静止画がありません。先に動画を処理してください。');
-        return;
-      }
+　　/**
+　　 * 静止画一括コピー
+　　 */
+　　async function copyAllFrames() {
+　　　　if (!extractedFrames.length) {
+　　　　　　alert('静止画がありません。先に動画を処理してください。');
+　　　　　　return;
+　　　　}
 
-      try {
-        // 画像ごとにClipboardItemを作成
-        const items = await Promise.all(
-          extractedFrames.map(async (frameURL) => {
-            const blob = dataURLToBlob(frameURL);
-            return new ClipboardItem({ [blob.type]: blob });
-          })
-        );
+　　　　try {
+　　　　　　// 画像ごとにClipboardItemを作成
+　　　　　　const items = await Promise.all(
+　　　　　　　　extractedFrames.map(async (frameURL) => {
+　　　　　　　　　　const blob = dataURLToBlob(frameURL);
+　　　　　　　　　　return new ClipboardItem({ [blob.type]: blob });
+　　　　　　　　})
+　　　　　　);
 
-        // クリップボードに書き込み
-        await navigator.clipboard.write(items);
+　　　　　　// クリップボードに書き込み
+　　　　　　await navigator.clipboard.write(items);
 
-        alert(
-          'すべての静止画をクリップボードにコピーしました！\n' +
-          '（貼り付け先のアプリによっては複数画像を正しく扱えない可能性があります）'
-        );
-      } catch (error) {
-        console.error('画像コピーエラー:', error);
-        alert('画像の一括コピーに失敗しました。ブラウザやペースト先の制限が原因の可能性があります。');
-      }
-    }
+　　　　　　alert(
+　　　　　　　　'すべての静止画をクリップボードにコピーしました！\n' +
+　　　　　　　　'（貼り付け先のアプリによっては複数画像を正しく扱えない可能性があります）'
+　　　　　　);
+　　　　} catch (error) {
+　　　　　　console.error('画像コピーエラー:', error);
+　　　　　　alert('画像の一括コピーに失敗しました。ブラウザやペースト先の制限が原因の可能性があります。');
+　　　　}
+　　}
 
-    /**
-     * DataURL -> Blob変換
-     * @param {string} dataURL
-     * @returns {Blob}
-     */
-    function dataURLToBlob(dataURL) {
-      const parts = dataURL.split(',');
-      const byteString = atob(parts[1]);
-      const mimeString = parts[0].split(':')[1].split(';')[0];
-      const buffer = new ArrayBuffer(byteString.length);
-      const dataView = new Uint8Array(buffer);
-      for (let i = 0; i < byteString.length; i++) {
-        dataView[i] = byteString.charCodeAt(i);
-      }
-      return new Blob([buffer], { type: mimeString });
-    }
+　　/**
+　　 * DataURL → Blob変換
+　　 * @param {string} dataURL
+　　 * @returns {Blob}
+　　 */
+　　function dataURLToBlob(dataURL) {
+　　　　const parts = dataURL.split(',');
+　　　　const byteString = atob(parts[1]);
+　　　　const mimeString = parts[0].split(':')[1].split(';')[0];
+　　　　const buffer = new ArrayBuffer(byteString.length);
+　　　　const dataView = new Uint8Array(buffer);
+　　　　for (let i = 0; i < byteString.length; i++) {
+　　　　　　dataView[i] = byteString.charCodeAt(i);
+　　　　}
+　　　　return new Blob([buffer], { type: mimeString });
+　　}
 
-    /**
-     * フレーム画像から日本語字幕をOCR解析
-     * @param {string[]} frames
-     * @returns {Promise<{timestamp:number, text:string}[]>}
-     */
-    async function extractTextFromFrames(frames) {
-      const subtitles = [];
-      for (let i = 0; i < frames.length; i++) {
-        const text = await Tesseract.recognize(frames[i], 'jpn', {
-          logger: (info) => console.log(info),
-        });
-        const cleanedText = text.data.text.replace(/\s+/g, ' ').trim();
-        if (cleanedText) {
-          subtitles.push({ timestamp: i * 3, text: cleanedText }); // 3秒間隔
-        }
-      }
-      return subtitles;
-    }
+　　/**
+　　 * フレーム画像から日本語字幕をOCR解析
+　　 * @param {string[]} frames
+　　 * @returns {Promise<{timestamp:number, text:string}[]>}
+　　 */
+　　async function extractTextFromFrames(frames) {
+　　　　const subtitles = [];
+　　　　for (let i = 0; i < frames.length; i++) {
+　　　　　　const result = await Tesseract.recognize(frames[i], 'jpn', {
+　　　　　　　　logger: (info) => console.log(info),
+　　　　　　});
+　　　　　　const cleanedText = result.data.text.replace(/\s+/g, ' ').trim();
+　　　　　　if (cleanedText) {
+　　　　　　　　subtitles.push({ timestamp: i * 2, text: cleanedText }); // 2秒間隔
+　　　　　　}
+　　　　}
+　　　　return subtitles;
+　　}
 
-    /**
-     * 抽出字幕の表示
-     * @param {{timestamp:number, text:string}[]} subtitles
-     */
-    function displaySubtitles(subtitles) {
-      const subtitleText = document.getElementById('subtitle-text');
-      subtitleText.innerText = subtitles
-        .map((s) => `${s.timestamp}秒: ${s.text}`)
-        .join('\n');
-      document.getElementById('text-section').style.display = 'block';
-    }
+　　/**
+　　 * 抽出字幕の表示
+　　 * @param {{timestamp:number, text:string}[]} subtitles
+　　 */
+　　function displaySubtitles(subtitles) {
+　　　　const subtitleText = document.getElementById('subtitle-text');
+　　　　subtitleText.innerText = subtitles
+　　　　　　.map((s) => `${s.timestamp}秒: ${s.text}`)
+　　　　　　.join('\n');
+　　　　document.getElementById('text-section').style.display = 'block';
+　　}
 
-    /**
-     * ページ全体スクリーンショットをクリップボードにコピー
-     *  - 失敗時は自動的にダウンロード
-     */
-    async function captureAndCopyPage() {
-      const captureBtn = document.getElementById('capture-btn');
-      captureBtn.disabled = true;
+　　/**
+　　 * 抽出した静止画をZIPファイルにまとめて自動ダウンロード
+　　 * @param {string[]} frames
+　　 */
+　　function downloadAllFrames(frames) {
+　　　　const zip = new JSZip();
+　　　　frames.forEach((frame, index) => {
+　　　　　　// DataURLの「data:image/jpeg;base64,」以降の部分をファイル内容として追加
+　　　　　　zip.file(`frame_${index}.jpg`, frame.split(',')[1], { base64: true });
+　　　　});
+　　　　zip.generateAsync({ type: 'blob' }).then((content) => {
+　　　　　　saveAs(content, 'frames.zip');
+　　　　});
+　　}
 
-      try {
-        // ページ全体をhtml2canvasでキャプチャ
-        const canvas = await html2canvas(document.body, {
-          useCORS: true,         // CORSが必要な画像を扱う場合に有効
-          logging: true          // デバッグログを表示
-        });
+　　/**
+　　 * ページ全体スクリーンショットをクリップボードにコピー
+　　 * － 失敗時は自動的にダウンロード
+　　 */
+　　async function captureAndCopyPage() {
+　　　　const captureBtn = document.getElementById('capture-btn');
+　　　　captureBtn.disabled = true;
 
-        const blob = await new Promise((resolve) => {
-          canvas.toBlob(resolve, 'image/png');
-        });
+　　　　try {
+　　　　　　// ページ全体をhtml2canvasでキャプチャ
+　　　　　　const canvas = await html2canvas(document.body, {
+　　　　　　　　useCORS: true,
+　　　　　　　　logging: true
+　　　　　　});
 
-        if (!blob) {
-          throw new Error('CanvasからBlobを生成できませんでした');
-        }
+　　　　　　const blob = await new Promise((resolve) => {
+　　　　　　　　canvas.toBlob(resolve, 'image/png');
+　　　　　　});
 
-        // クリップボードに書き込みを試みる
-        await navigator.clipboard.write([
-          new ClipboardItem({ 'image/png': blob })
-        ]);
+　　　　　　if (!blob) {
+　　　　　　　　throw new Error('CanvasからBlobを生成できませんでした');
+　　　　　　}
 
-        alert('このページのスクリーンショットをクリップボードにコピーしました！');
-      } catch (error) {
-        console.error('スクリーンショットエラー:', error);
+　　　　　　// クリップボードに書き込み
+　　　　　　await navigator.clipboard.write([
+　　　　　　　　new ClipboardItem({ 'image/png': blob })
+　　　　　　]);
 
-        // 失敗時は画像をダウンロードさせる
-        try {
-          const canvas = await html2canvas(document.body, { useCORS: true });
-          const dataURL = canvas.toDataURL('image/png');
-          const link = document.createElement('a');
-          link.href = dataURL;
-          link.download = 'screenshot.png';
-          link.click();
+　　　　　　alert('このページのスクリーンショットをクリップボードにコピーしました！');
+　　　　} catch (error) {
+　　　　　　console.error('スクリーンショットエラー:', error);
+　　　　　　// 失敗時は画像をダウンロード
+　　　　　　try {
+　　　　　　　　const canvas = await html2canvas(document.body, { useCORS: true });
+　　　　　　　　const dataURL = canvas.toDataURL('image/png');
+　　　　　　　　const link = document.createElement('a');
+　　　　　　　　link.href = dataURL;
+　　　　　　　　link.download = 'screenshot.png';
+　　　　　　　　link.click();
 
-          alert(
-            'スクリーンショットをクリップボードにコピーできなかったため、画像ファイルをダウンロードしました。'
-          );
-        } catch (downloadError) {
-          console.error('ダウンロードフォールバックエラー:', downloadError);
-          alert(
-            'スクリーンショットのコピーにも、ダウンロードにも失敗しました。' +
-            'ブラウザやHTTPS環境の制限が原因の可能性があります。'
-          );
-        }
-      } finally {
-        captureBtn.disabled = false;
-      }
-    }
-  </script>
+　　　　　　　　alert('スクリーンショットをクリップボードにコピーできなかったため、画像ファイルをダウンロードしました。');
+　　　　　　} catch (downloadError) {
+　　　　　　　　console.error('ダウンロードフォールバックエラー:', downloadError);
+　　　　　　　　alert('スクリーンショットのコピーにも、ダウンロードにも失敗しました。ブラウザやHTTPS環境の制限が原因の可能性があります。');
+　　　　　　}
+　　　　} finally {
+　　　　　　captureBtn.disabled = false;
+　　　　}
+　　}
+　</script>
 </body>
 </html>
